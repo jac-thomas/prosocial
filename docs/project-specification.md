@@ -18,6 +18,9 @@ _How will we know it's successful?_
 
 An active user base.
 High quality integrations and data sets.
+High conversion to offline activity.
+Patreon support
+Entertaining and educational
 
 
 ## Scope 
