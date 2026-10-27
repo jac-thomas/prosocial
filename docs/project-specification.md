@@ -53,6 +53,7 @@ _Performance, security, reliability, accessibility, maintainability, etc._
 - Hexagonal architecture. One of the only good arguments I've heard against this is the amount of boiler plate. Now that AI has made writing code so cheap the benefits of maintainability, loose coupling and grokkability outweigh this concern.
 - Clean code https://medium.com/jonathans-musings/clean-code-in-the-age-of-ai-fc00d204d3e4
 - Strong CI/CD test coverage
+- Privacy by design: citizen political opinions are special category data, see Data model → Citizen data protection.
 - The aim of prosocial media is not to keep peoples attention hooked on the platform but to use it as a tool to get them offline. So there should be encouragement to offline engagement.
 
 # Technical architecture 
@@ -66,6 +67,77 @@ TBD and up for debate, but current assumption would be:
 
 # Data model 
 _Key entities, relationships, storage and retention requirements._
+
+fig 1: Basic entity relationship diagram:
+
+```mermaid
+erDiagram
+    BODY ||--o{ CONSTITUENCY : "has"
+    BODY ||--o{ DEMOCRATIC_ITEM : "considers"
+    CONSTITUENCY ||--o{ CITIZEN : "is home to"
+    CONSTITUENCY ||--o{ ELECTED_REPRESENTATIVE : "is represented by"
+    CONSTITUENCY ||--o{ CITIZEN_VOTE : "aggregated by"
+    ELECTED_REPRESENTATIVE ||--o{ MEMBERSHIP : "has"
+    PARTY ||--o{ MEMBERSHIP : "has"
+    POLITICAL_LEANING ||--o{ PARTY : "describes"
+    POLITICAL_LEANING ||--o{ INFORMATION_SOURCE : "describes"
+    ELECTED_REPRESENTATIVE |o--o{ DEMOCRATIC_ITEM : "proposes"
+    DEMOCRATIC_ITEM ||--o{ DIVISION : "is voted on in"
+    DIVISION ||--o{ OPTION : "offers"
+    CITIZEN ||--o{ CITIZEN_VOTE : "casts (pseudonymously)"
+    ELECTED_REPRESENTATIVE ||--o{ REPRESENTATIVE_VOTE : "casts"
+    OPTION ||--o{ CITIZEN_VOTE : "chosen in"
+    OPTION ||--o{ REPRESENTATIVE_VOTE : "chosen in"
+    INFORMATION_SOURCE ||--o{ ARTICLE : "publishes"
+    DEMOCRATIC_ITEM ||--o{ ARTICLE : "is covered by"
+
+    DEMOCRATIC_ITEM {
+        string title
+        string description
+        date date
+    }
+    DIVISION {
+        string question
+        date date
+    }
+    OPTION {
+        string label "usually Aye or No"
+    }
+    CITIZEN_VOTE {
+        string voterRef "keyed hash of citizen id, not a foreign key"
+    }
+    MEMBERSHIP {
+        date startDate
+        date endDate "empty while current"
+    }
+    INFORMATION_SOURCE {
+        string name "e.g. The Guardian, Wikipedia"
+        string url
+    }
+    ARTICLE {
+        string title
+        string url
+        date publishedAt
+    }
+```
+
+Notes:
+- A democratic item (usually a bill) is voted on in one or more divisions (second reading, amendments, third reading). Citizens vote on the same divisions as MPs so comparisons are like for like.
+- CitizenVote and RepresentativeVote are both a kind of vote (an option chosen on a division). They share a common interface in code but are deliberately separate tables: MP votes are public records imported from Parliament, citizen votes are private political opinions.
+- Party membership is time-bound, so historical votes stay attributed to the right party when MPs switch.
+- An MP's political leaning is not assigned, it is derived from their voting record.
+- Articles are found dynamically by searching for coverage of an item from a source with the requested leaning, then cached as Article records.
+
+## Citizen data protection
+Citizens' political opinions are special category data under UK GDPR, so protection is designed in:
+- **Pseudonymous votes:** CitizenVote stores `voterRef = HMAC(citizenId, key)`, not the citizen id. The key lives outside the database (secrets manager), so a database dump alone can't link votes to accounts. The app can still show users their own votes by computing the ref.
+- **Aggregate without identity:** CitizenVote stores the constituency directly, so peer results are computed without touching identities.
+- **Aggregates only, with a minimum group size:** individual citizen votes are never shown to anyone but their owner. Peer results are only displayed when a group has at least k votes (start with k = 10), so small groups can't single people out.
+- **Data minimisation:** an account holds an email and a constituency. Postcodes are used for the constituency lookup then discarded. No real names required.
+- **Explicit consent:** the lawful basis for processing political opinions is explicit consent (UK GDPR Art. 9), asked for clearly at sign-up.
+- **User rights:** users can export their votes, and deleting an account deletes its votes.
+- **Least-privilege access:** citizen vote tables have their own DB role. Analytics and reporting read only aggregate views. Logs and traces never contain vote content or voterRefs.
+- **Encryption:** in transit (TLS) and at rest, including backups.
 
 
 
@@ -95,4 +167,15 @@ _Budget, time, dependencies, regulatory requirements, known limitations._
 
 # Open questions & risks 
 _Things to investigate or decisions still to make._
-- Any other similar projects around?
+- Retention: civic apps tend to spike around elections then fade. Favour a low-frequency digest (e.g. weekly) over chasing engagement metrics.
+- Verification: how do we ensure one real person, one vote, in the right constituency?
+- Privacy: political opinions are special category data under UK GDPR.
+
+## Similar projects
+_What already exists, what we can reuse, and how we differ._
+- **TheyWorkForYou / WriteToThem** (mySociety, UK): MP voting records and contacting your MP. Read-only, citizens aren't asked for their opinion. Reuse their API and data rather than rebuilding it; possible collaborator.
+- **Vote for Policies** (UK): blind policy comparison matched to parties. A one-off quiz at election time, not ongoing per parliamentary vote.
+- **Countable** (US): citizens weighed in on bills and compared with their representatives. The closest match; reportedly struggled with retention, worth researching the lessons.
+- **Pol.is / vTaiwan / Decidim**: deliberation and participation platforms. Good ideas for showing peer opinion without polarising.
+
+**How we differ:** an ongoing UK loop of agenda item → learn from balanced sources → vote → compare with peers and your MP → take action offline.
