@@ -67,6 +67,34 @@ TBD and up for debate, but current assumption would be:
 # Data model 
 _Key entities, relationships, storage and retention requirements._
 
+Basic data model diagram:
+
+fig 1: ![Basic data model](imgs/prosocial-domain.png)
+
+fig 2: the same model as a Mermaid diagram (renders on GitHub, editable as text):
+
+```mermaid
+erDiagram
+    POLITICAL_LEANING ||--o{ PARTY : "describes"
+    POLITICAL_LEANING ||--o{ ELECTED_REPRESENTATIVE : "describes"
+    POLITICAL_LEANING ||--o{ INFORMATION_SOURCE : "describes"
+    PARTY ||--o{ ELECTED_REPRESENTATIVE : "has member"
+    CITIZEN ||--o{ VOTE : "casts"
+    ELECTED_REPRESENTATIVE ||--o{ VOTE : "casts"
+    OPTION ||--o{ VOTE : "chosen in"
+    DEMOCRATIC_ITEM ||--o{ OPTION : "offers"
+
+    DEMOCRATIC_ITEM {
+        string title
+        string description
+        date date
+        string proposedBy
+    }
+    INFORMATION_SOURCE {
+        string url
+    }
+```
+
 
 
 # Tooling & technology
